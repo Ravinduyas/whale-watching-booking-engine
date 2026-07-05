@@ -2,6 +2,7 @@
 // elegant Fraunces display + clean Outfit body. Built for a Sri Lankan whale-watching operator.
 
 import { useState, useEffect, useMemo } from "react";
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from "react-router-dom";
 
 /* ─────────────────────────────────────────────────────────────
    CONFIG — change these to match your real operation
@@ -9,6 +10,12 @@ import { useState, useEffect, useMemo } from "react";
 const CURRENCY = "Rs ";          // e.g. "Rs ", "$", "€"
 const PRICE_PER_SEAT = 995;      // per-seat price
 const OPERATOR = "Ocean Drift Whale Watching";
+
+// Operator dashboard login (demo). Swap these for real auth before production —
+// this is a client-side gate only, not real security.
+const OPERATOR_USER = "operator";
+const OPERATOR_PASSWORD = "whales123";
+const AUTH_KEY = "ww:auth:v1";
 
 // 3 yachts: 2 wide + 1 long. Wide = short & fat grid, Long = tall & narrow grid.
 // `charter` = flat whole-boat price (edit these to your real charter rates).
@@ -77,9 +84,12 @@ async function saveBookings(list) {
    COMPONENT
    ───────────────────────────────────────────────────────────── */
 export default function App() {
-  const [view, setView] = useState("book");
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState(memStore || []);
   const [ready, setReady] = useState(false);
+  const [authed, setAuthed] = useState(() => {
+    try { return localStorage.getItem(AUTH_KEY) === "1"; } catch (e) { return false; }
+  });
 
   // booking flow state
   const [date, setDate] = useState(todayStr());
@@ -159,6 +169,20 @@ export default function App() {
     await saveBookings(next);
   }
 
+  function login(u, p) {
+    if (u.trim() === OPERATOR_USER && p === OPERATOR_PASSWORD) {
+      setAuthed(true);
+      try { localStorage.setItem(AUTH_KEY, "1"); } catch (e) { /* ignore */ }
+      return true;
+    }
+    return false;
+  }
+  function logout() {
+    setAuthed(false);
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+    navigate("/");
+  }
+
   /* ── styles ── */
   const S = {
     page: { minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'Outfit', sans-serif" },
@@ -203,7 +227,8 @@ export default function App() {
           font-size:14px;font-weight:600;padding:10px;border-radius:9px;cursor:pointer;transition:.15s}
         .seg button.on{background:var(--surface2);color:var(--text)}
         .navlink{background:none;border:none;color:var(--muted);font-family:inherit;font-size:15px;
-          font-weight:600;cursor:pointer;padding:8px 4px;border-bottom:2px solid transparent}
+          font-weight:600;cursor:pointer;padding:8px 4px;border-bottom:2px solid transparent;
+          text-decoration:none;display:inline-block}
         .navlink.on{color:var(--text);border-color:var(--coral)}
         .label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;font-weight:600}
         a{color:var(--teal)}
@@ -220,22 +245,32 @@ export default function App() {
               <div style={{ fontSize: 12, color: "var(--muted)" }}>Morning whale-watching tours · Mirissa coast</div>
             </div>
           </div>
-          <nav style={{ display: "flex", gap: 22 }}>
-            <button className={`navlink ${view === "book" ? "on" : ""}`} onClick={() => setView("book")}>Book a tour</button>
-            <button className={`navlink ${view === "dashboard" ? "on" : ""}`} onClick={() => setView("dashboard")}>Operator dashboard</button>
+          <nav style={{ display: "flex", gap: 22, alignItems: "center" }}>
+            <NavLink to="/" end className={({ isActive }) => `navlink ${isActive ? "on" : ""}`}>Book a tour</NavLink>
+            <NavLink to="/dashboard" className={({ isActive }) => `navlink ${isActive ? "on" : ""}`}>Operator dashboard</NavLink>
+            {authed && (
+              <button className="btn btn-ghost" style={{ padding: "8px 14px", fontSize: 13 }} onClick={logout}>Log out</button>
+            )}
           </nav>
         </div>
       </header>
 
       <main style={S.wrap}>
-        {!ready && <p style={{ color: "var(--muted)", marginTop: 40 }}>Loading bookings…</p>}
-
-        {ready && view === "book" && (
-          <BookFlow {...{ S, date, setDate, slot, setSlot, yachtId, setYachtId, yacht, mode, setMode, picked, setPicked, charterSize, setCharterSize, cust, setCust, total, availFor, seatIds, canConfirm, confirmBooking }} />
-        )}
-
-        {ready && view === "dashboard" && (
-          <Dashboard {...{ S, bookings, date, setDate, slot, setSlot, availFor, cancelBooking }} />
+        {!ready ? (
+          <p style={{ color: "var(--muted)", marginTop: 40 }}>Loading bookings…</p>
+        ) : (
+          <Routes>
+            <Route path="/" element={
+              <BookFlow {...{ S, date, setDate, slot, setSlot, yachtId, setYachtId, yacht, mode, setMode, picked, setPicked, charterSize, setCharterSize, cust, setCust, total, availFor, seatIds, canConfirm, confirmBooking }} />
+            } />
+            <Route path="/login" element={<Login S={S} authed={authed} onLogin={login} />} />
+            <Route path="/dashboard" element={
+              <RequireAuth authed={authed}>
+                <Dashboard {...{ S, bookings, date, setDate, slot, setSlot, availFor, cancelBooking }} />
+              </RequireAuth>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         )}
       </main>
 
@@ -572,6 +607,57 @@ function Dashboard({ S, bookings, date, setDate, slot, setSlot, availFor, cancel
           })}
         </div>
       </section>
+    </div>
+  );
+}
+
+/* ─────────────── AUTH ─────────────── */
+function RequireAuth({ authed, children }) {
+  const location = useLocation();
+  // Bounce unauthenticated visitors to /login, remembering where they were headed.
+  if (!authed) return <Navigate to="/login" state={{ from: location }} replace />;
+  return children;
+}
+
+function Login({ S, authed, onLogin }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/dashboard";
+  const [u, setU] = useState("");
+  const [p, setP] = useState("");
+  const [err, setErr] = useState("");
+
+  // Already signed in? Skip the form.
+  useEffect(() => { if (authed) navigate(from, { replace: true }); }, [authed]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (onLogin(u, p)) navigate(from, { replace: true });
+    else setErr("Incorrect username or password.");
+  };
+
+  return (
+    <div className="fu" style={{ display: "grid", placeItems: "center", marginTop: 60 }}>
+      <form onSubmit={submit} style={{ ...S.card, width: "100%", maxWidth: 380 }}>
+        <div style={{ fontSize: 40, textAlign: "center" }}>🔒</div>
+        <h2 className="display" style={{ fontSize: 24, textAlign: "center", margin: "6px 0 2px" }}>Operator sign in</h2>
+        <p style={{ color: "var(--muted)", textAlign: "center", marginTop: 0, fontSize: 14 }}>
+          The dashboard is restricted to staff.
+        </p>
+        <div style={{ marginTop: 12 }}>
+          <div className="label">Username</div>
+          <input className="inp" autoFocus value={u} onChange={(e) => { setU(e.target.value); setErr(""); }} placeholder="operator" />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <div className="label">Password</div>
+          <input className="inp" type="password" value={p} onChange={(e) => { setP(e.target.value); setErr(""); }} placeholder="••••••••" />
+        </div>
+        {err && <div style={{ color: "var(--bad)", fontSize: 13, marginTop: 10 }}>{err}</div>}
+        <button className="btn btn-primary" type="submit" style={{ width: "100%", marginTop: 16 }}>Sign in</button>
+        <p style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 12, marginBottom: 0 }}>
+          Demo credentials — <strong style={{ color: "var(--text)" }}>operator</strong> / <strong style={{ color: "var(--text)" }}>whales123</strong>
+        </p>
+      </form>
     </div>
   );
 }
