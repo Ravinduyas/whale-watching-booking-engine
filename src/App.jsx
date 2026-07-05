@@ -266,123 +266,180 @@ export default function App() {
 function BookFlow(props) {
   const { S, date, setDate, slot, setSlot, yachtId, setYachtId, yacht, mode, setMode,
     picked, setPicked, charterSize, setCharterSize, cust, setCust, total, availFor, seatIds, canConfirm, confirmBooking } = props;
+  const [step, setStep] = useState(1);
 
   const toggleSeat = (id, taken) => {
     if (taken) return;
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   };
 
+  const steps = [
+    { n: 1, label: "Date & departure" },
+    { n: 2, label: "Choose your yacht" },
+    { n: 3, label: "How to book" },
+    { n: 4, label: "Lead guest" },
+  ];
+  // whether the CURRENT step has enough input to move on
+  const stepValid = (s) => {
+    if (s === 1) return true;
+    if (s === 2) return !!yacht;
+    if (s === 3) return mode === "seat" ? picked.length > 0 : (charterSize >= 1 && charterSize <= cap(yacht));
+    if (s === 4) return canConfirm();
+    return false;
+  };
+  const canNext = stepValid(step);
+  const goNext = () => { if (canNext) setStep((s) => Math.min(4, s + 1)); };
+  const goBack = () => setStep((s) => Math.max(1, s - 1));
+
   return (
     <div className="fu" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 22, marginTop: 26, alignItems: "start" }}>
       <div style={{ display: "grid", gap: 18 }}>
-        {/* 1. Date + morning slot */}
-        <section style={S.card}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
-            <span className="display" style={{ fontSize: 19 }}>1 · Date & departure</span>
-            <span className="pill" style={{ background: "rgba(255,193,94,.15)", color: "var(--amber)" }}>☀ Morning only</span>
-          </div>
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 180px" }}>
-              <div className="label">Tour date</div>
-              <input className="inp" type="date" min={todayStr()} value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div style={{ flex: "1 1 240px" }}>
-              <div className="label">Departure</div>
-              <div className="seg">
-                {SLOTS.map((s) => (
-                  <button key={s.id} className={slot === s.id ? "on" : ""} onClick={() => setSlot(s.id)}>
-                    {s.label} <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {s.tag}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* STEP INDICATOR */}
+        <div style={{ display: "flex", gap: 8 }}>
+          {steps.map((st) => {
+            const active = step === st.n;
+            const done = st.n < step;
+            const reachable = st.n <= step; // can jump back to visited steps
+            return (
+              <button key={st.n} onClick={() => reachable && setStep(st.n)}
+                style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, cursor: reachable ? "pointer" : "not-allowed",
+                  background: active ? "var(--surface2)" : "var(--surface)", border: "1px solid",
+                  borderColor: active ? "var(--coral)" : "var(--border)", borderRadius: 12, padding: "10px 12px",
+                  color: active ? "var(--text)" : "var(--muted)", fontFamily: "inherit", textAlign: "left" }}>
+                <span style={{ width: 24, height: 24, flexShrink: 0, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700,
+                  background: active ? "var(--sun)" : done ? "rgba(74,222,128,.18)" : "var(--bg)",
+                  color: active ? "#3a1d00" : done ? "var(--good)" : "var(--muted)" }}>{done ? "✓" : st.n}</span>
+                <span className="hide-sm" style={{ fontSize: 13, fontWeight: 600 }}>{st.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-        {/* 2. Choose yacht */}
-        <section style={S.card}>
-          <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>2 · Choose your yacht</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-            {YACHTS.map((y) => {
-              const a = availFor(y.id);
-              const sel = yachtId === y.id;
-              const full = a.remaining === 0;
-              return (
-                <div key={y.id} className="ycard" onClick={() => !full && setYachtId(y.id)}
-                  style={{ ...S.card, padding: 16, borderColor: sel ? "var(--coral)" : "var(--border)", opacity: full ? 0.55 : 1, cursor: full ? "not-allowed" : "pointer", background: sel ? "var(--surface2)" : "var(--surface)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span className="display" style={{ fontSize: 18 }}>{y.name}</span>
-                    <span className="pill" style={{ background: "rgba(52,216,196,.13)", color: "var(--teal)" }}>{y.type === "wide" ? "Wide hull" : "Long hull"}</span>
+        {/* CURRENT STEP — one "window" at a time */}
+        <section style={S.card} className="fu" key={step}>
+          {/* 1. Date + morning slot */}
+          {step === 1 && (
+            <div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+                <span className="display" style={{ fontSize: 19 }}>1 · Date & departure</span>
+                <span className="pill" style={{ background: "rgba(255,193,94,.15)", color: "var(--amber)" }}>☀ Morning only</span>
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 180px" }}>
+                  <div className="label">Tour date</div>
+                  <input className="inp" type="date" min={todayStr()} value={date} onChange={(e) => setDate(e.target.value)} />
+                </div>
+                <div style={{ flex: "1 1 240px" }}>
+                  <div className="label">Departure</div>
+                  <div className="seg">
+                    {SLOTS.map((s) => (
+                      <button key={s.id} className={slot === s.id ? "on" : ""} onClick={() => setSlot(s.id)}>
+                        {s.label} <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {s.tag}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>{cap(y)} seats · {y.rows}×{y.cols}</div>
-                  <div style={{ fontSize: 14, marginTop: 6, color: full ? "var(--bad)" : "var(--good)", fontWeight: 600 }}>
-                    {a.chartered ? "Chartered" : full ? "Sold out" : `${a.remaining} seats left`}
-                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* 3. Mode + seats/charter */}
-        {yacht && (
-          <section style={S.card} className="fu">
-            <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>3 · How would you like to book?</div>
-            <div className="seg" style={{ maxWidth: 420, marginBottom: 14 }}>
-              <button className={mode === "seat" ? "on" : ""} onClick={() => setMode("seat")}>Individual seats</button>
-              <button className={mode === "charter" ? "on" : ""} onClick={() => setMode("charter")}>Full yacht charter</button>
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
-              {mode === "seat"
-                ? <>Price: <strong style={{ color: "var(--text)" }}>{money(PRICE_PER_SEAT)}</strong> per seat</>
-                : <>Flat charter: <strong style={{ color: "var(--text)" }}>{money(yacht.charter)}</strong> for the whole {yacht.name} — any group size up to {cap(yacht)}</>}
+          )}
+
+          {/* 2. Choose yacht */}
+          {step === 2 && (
+            <div>
+              <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>2 · Choose your yacht</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
+                {YACHTS.map((y) => {
+                  const a = availFor(y.id);
+                  const sel = yachtId === y.id;
+                  const full = a.remaining === 0;
+                  return (
+                    <div key={y.id} className="ycard" onClick={() => !full && setYachtId(y.id)}
+                      style={{ ...S.card, padding: 16, borderColor: sel ? "var(--coral)" : "var(--border)", opacity: full ? 0.55 : 1, cursor: full ? "not-allowed" : "pointer", background: sel ? "var(--surface2)" : "var(--surface)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="display" style={{ fontSize: 18 }}>{y.name}</span>
+                        <span className="pill" style={{ background: "rgba(52,216,196,.13)", color: "var(--teal)" }}>{y.type === "wide" ? "Wide hull" : "Long hull"}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>{cap(y)} seats · {y.rows}×{y.cols}</div>
+                      <div style={{ fontSize: 14, marginTop: 6, color: full ? "var(--bad)" : "var(--good)", fontWeight: 600 }}>
+                        {a.chartered ? "Chartered" : full ? "Sold out" : `${a.remaining} seats left`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+          )}
 
-            {mode === "seat" ? (
-              <SeatMap yacht={yacht} avail={availFor(yacht.id)} picked={picked} toggle={toggleSeat} seatIds={seatIds} />
-            ) : (
-              <div>
-                <div className="label">Group size (full charter — books the entire {yacht.name})</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <button className="btn btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setCharterSize((n) => Math.max(1, n - 1))}>–</button>
-                  <span style={{ fontSize: 22, fontWeight: 700, minWidth: 40, textAlign: "center" }}>{charterSize}</span>
-                  <button className="btn btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setCharterSize((n) => Math.min(cap(yacht), n + 1))}>+</button>
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>of {cap(yacht)} max · whole boat reserved</span>
-                </div>
+          {/* 3. Mode + seats/charter */}
+          {step === 3 && yacht && (
+            <div>
+              <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>3 · How would you like to book?</div>
+              <div className="seg" style={{ maxWidth: 420, marginBottom: 14 }}>
+                <button className={mode === "seat" ? "on" : ""} onClick={() => setMode("seat")}>Individual seats</button>
+                <button className={mode === "charter" ? "on" : ""} onClick={() => setMode("charter")}>Full yacht charter</button>
               </div>
-            )}
-          </section>
-        )}
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
+                {mode === "seat"
+                  ? <>Price: <strong style={{ color: "var(--text)" }}>{money(PRICE_PER_SEAT)}</strong> per seat</>
+                  : <>Flat charter: <strong style={{ color: "var(--text)" }}>{money(yacht.charter)}</strong> for the whole {yacht.name} — any group size up to {cap(yacht)}</>}
+              </div>
 
-        {/* 4. Details + channel */}
-        {yacht && (
-          <section style={S.card} className="fu">
-            <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>4 · Lead guest & booking channel</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div style={{ gridColumn: "span 1" }}>
-                <div className="label">Name</div>
-                <input className="inp" placeholder="Guest / group name" value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} />
-              </div>
-              <div>
-                <div className="label">Phone / WhatsApp</div>
-                <input className="inp" placeholder="+94 …" value={cust.phone} onChange={(e) => setCust({ ...cust, phone: e.target.value })} />
-              </div>
-              <div>
-                <div className="label">Channel</div>
-                <div className="seg">
-                  <button className={cust.channel === "online" ? "on" : ""} onClick={() => setCust({ ...cust, channel: "online" })}>Online</button>
-                  <button className={cust.channel === "agent" ? "on" : ""} onClick={() => setCust({ ...cust, channel: "agent" })}>Travel agent</button>
-                </div>
-              </div>
-              {cust.channel === "agent" && (
+              {mode === "seat" ? (
+                <SeatMap yacht={yacht} avail={availFor(yacht.id)} picked={picked} toggle={toggleSeat} seatIds={seatIds} />
+              ) : (
                 <div>
-                  <div className="label">Agent / partner name</div>
-                  <input className="inp" placeholder="e.g. Lanka Tours" value={cust.agentName} onChange={(e) => setCust({ ...cust, agentName: e.target.value })} />
+                  <div className="label">Group size (full charter — books the entire {yacht.name})</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <button className="btn btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setCharterSize((n) => Math.max(1, n - 1))}>–</button>
+                    <span style={{ fontSize: 22, fontWeight: 700, minWidth: 40, textAlign: "center" }}>{charterSize}</span>
+                    <button className="btn btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setCharterSize((n) => Math.min(cap(yacht), n + 1))}>+</button>
+                    <span style={{ color: "var(--muted)", fontSize: 13 }}>of {cap(yacht)} max · whole boat reserved</span>
+                  </div>
                 </div>
               )}
             </div>
-          </section>
-        )}
+          )}
+
+          {/* 4. Details + channel */}
+          {step === 4 && yacht && (
+            <div>
+              <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>4 · Lead guest & booking channel</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ gridColumn: "span 1" }}>
+                  <div className="label">Name</div>
+                  <input className="inp" placeholder="Guest / group name" value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} />
+                </div>
+                <div>
+                  <div className="label">Phone / WhatsApp</div>
+                  <input className="inp" placeholder="+94 …" value={cust.phone} onChange={(e) => setCust({ ...cust, phone: e.target.value })} />
+                </div>
+                <div>
+                  <div className="label">Channel</div>
+                  <div className="seg">
+                    <button className={cust.channel === "online" ? "on" : ""} onClick={() => setCust({ ...cust, channel: "online" })}>Online</button>
+                    <button className={cust.channel === "agent" ? "on" : ""} onClick={() => setCust({ ...cust, channel: "agent" })}>Travel agent</button>
+                  </div>
+                </div>
+                {cust.channel === "agent" && (
+                  <div>
+                    <div className="label">Agent / partner name</div>
+                    <input className="inp" placeholder="e.g. Lanka Tours" value={cust.agentName} onChange={(e) => setCust({ ...cust, agentName: e.target.value })} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* NAV — Back / Next, or Confirm on the last step */}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 22, borderTop: "1px solid var(--line)", paddingTop: 18 }}>
+            <button className="btn btn-ghost" style={{ visibility: step === 1 ? "hidden" : "visible" }} onClick={goBack}>← Back</button>
+            {step < 4 ? (
+              <button className="btn btn-primary" disabled={!canNext} onClick={goNext}>Next →</button>
+            ) : (
+              <button className="btn btn-primary" disabled={!canConfirm()} onClick={confirmBooking}>Confirm & auto-notify</button>
+            )}
+          </div>
+        </section>
       </div>
 
       {/* SUMMARY */}
@@ -400,11 +457,8 @@ function BookFlow(props) {
           <span style={{ color: "var(--muted)" }}>Total</span>
           <span className="display" style={{ fontSize: 26 }}>{money(total)}</span>
         </div>
-        <button className="btn btn-primary" style={{ width: "100%" }} disabled={!canConfirm()} onClick={confirmBooking}>
-          Confirm & auto-notify
-        </button>
         <p style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginBottom: 0 }}>
-          Generates a booking reference instantly — no manual confirmation.
+          Step {step} of 4 · complete each step to confirm
         </p>
       </aside>
     </div>
