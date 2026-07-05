@@ -195,10 +195,10 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Outfit:wght@300;400;500;600;700&display=swap');
         :root{
-          --bg:#06202b; --surface:#0d3142; --surface2:#114a5e; --border:rgba(255,255,255,.10);
-          --line:rgba(255,255,255,.06); --text:#eaf6f8; --muted:rgba(234,246,248,.58);
-          --teal:#34d8c4; --coral:#ff8a5b; --amber:#ffc15e; --good:#4ade80; --bad:#fb7185;
-          --sun:linear-gradient(135deg,#ffc15e,#ff7a59);
+          --bg:#ffffff; --surface:#f4f8ff; --surface2:#e6f0fd; --border:rgba(10,37,64,.14);
+          --line:rgba(10,37,64,.09); --text:#0c2748; --muted:rgba(12,39,72,.60);
+          --teal:#0891b2; --coral:#2563eb; --amber:#0ea5e9; --good:#16a34a; --bad:#e11d48;
+          --sun:linear-gradient(135deg,#3b82f6,#2563eb);
         }
         *{box-sizing:border-box} body{margin:0}
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
@@ -208,15 +208,15 @@ export default function App() {
         .seat{width:30px;height:30px;border-radius:8px 8px 7px 7px;border:1px solid var(--line);
           background:var(--surface2);cursor:pointer;transition:transform .12s,background .15s,box-shadow .15s;
           font-size:9px;color:var(--muted);display:flex;align-items:center;justify-content:center}
-        .seat:hover:not(.taken){transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.35)}
-        .seat.sel{background:var(--sun);color:#3a1d00;border-color:transparent;font-weight:600}
-        .seat.taken{background:rgba(255,255,255,.04);cursor:not-allowed;opacity:.45;color:transparent}
+        .seat:hover:not(.taken){transform:translateY(-2px);box-shadow:0 4px 12px rgba(13,39,72,.18)}
+        .seat.sel{background:var(--sun);color:#ffffff;border-color:transparent;font-weight:600}
+        .seat.taken{background:rgba(10,37,64,.10);cursor:not-allowed;opacity:.55;color:transparent}
         .ycard{transition:transform .15s,border-color .15s,box-shadow .15s;cursor:pointer}
-        .ycard:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+        .ycard:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(13,39,72,.16)}
         .btn{font-family:inherit;font-size:15px;font-weight:600;border:none;border-radius:12px;
           padding:14px 18px;cursor:pointer;transition:transform .12s,opacity .15s}
         .btn:active{transform:scale(.98)}
-        .btn-primary{background:var(--sun);color:#3a1d00}
+        .btn-primary{background:var(--sun);color:#ffffff}
         .btn-primary:disabled{opacity:.4;cursor:not-allowed}
         .btn-ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
         .inp{width:100%;font-family:inherit;font-size:15px;background:var(--bg);color:var(--text);
@@ -232,12 +232,26 @@ export default function App() {
         .navlink.on{color:var(--text);border-color:var(--coral)}
         .label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:9px;font-weight:600}
         a{color:var(--teal)}
-        @media(max-width:760px){.hide-sm{display:none}}
+        /* responsive layout */
+        .book-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:start}
+        .summary{position:sticky;top:18px}
+        .guest-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .site-header-inner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+        .site-nav{display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+        @media(max-width:760px){
+          .hide-sm{display:none}
+          .book-grid{grid-template-columns:1fr}
+          .summary{position:static}
+          .site-nav{gap:14px}
+        }
+        @media(max-width:560px){
+          .guest-grid{grid-template-columns:1fr}
+        }
       `}</style>
 
       {/* HEADER */}
-      <header style={{ background: "linear-gradient(180deg,#0a2c3a,transparent)", borderBottom: "1px solid var(--line)" }}>
-        <div style={{ ...S.wrap, padding: "20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <header style={{ background: "linear-gradient(180deg,#e8f1ff,transparent)", borderBottom: "1px solid var(--line)" }}>
+        <div className="site-header-inner" style={{ ...S.wrap, padding: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 11, background: "var(--sun)", display: "grid", placeItems: "center", fontSize: 20 }}>🐋</div>
             <div>
@@ -245,7 +259,7 @@ export default function App() {
               <div style={{ fontSize: 12, color: "var(--muted)" }}>Morning whale-watching tours · Mirissa coast</div>
             </div>
           </div>
-          <nav style={{ display: "flex", gap: 22, alignItems: "center" }}>
+          <nav className="site-nav">
             <NavLink to="/" end className={({ isActive }) => `navlink ${isActive ? "on" : ""}`}>Book a tour</NavLink>
             <NavLink to="/dashboard" className={({ isActive }) => `navlink ${isActive ? "on" : ""}`}>Operator dashboard</NavLink>
             {authed && (
@@ -276,7 +290,7 @@ export default function App() {
 
       {/* CONFIRMATION MODAL — replaces manual WhatsApp confirmation */}
       {confirmation && (
-        <div onClick={resetFlow} style={{ position: "fixed", inset: 0, background: "rgba(3,16,22,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 20, zIndex: 50 }}>
+        <div onClick={resetFlow} style={{ position: "fixed", inset: 0, background: "rgba(4,14,30,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 20, zIndex: 50 }}>
           <div className="fu" onClick={(e) => e.stopPropagation()} style={{ ...S.card, maxWidth: 440, width: "100%", textAlign: "center" }}>
             <div style={{ fontSize: 46 }}>✅</div>
             <h2 className="display" style={{ fontSize: 26, margin: "8px 0 4px" }}>Booking confirmed</h2>
@@ -327,7 +341,7 @@ function BookFlow(props) {
   const goBack = () => setStep((s) => Math.max(1, s - 1));
 
   return (
-    <div className="fu" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 22, marginTop: 26, alignItems: "start" }}>
+    <div className="fu book-grid" style={{ marginTop: 26 }}>
       <div style={{ display: "grid", gap: 18 }}>
         {/* STEP INDICATOR */}
         <div style={{ display: "flex", gap: 8 }}>
@@ -343,7 +357,7 @@ function BookFlow(props) {
                   color: active ? "var(--text)" : "var(--muted)", fontFamily: "inherit", textAlign: "left" }}>
                 <span style={{ width: 24, height: 24, flexShrink: 0, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700,
                   background: active ? "var(--sun)" : done ? "rgba(74,222,128,.18)" : "var(--bg)",
-                  color: active ? "#3a1d00" : done ? "var(--good)" : "var(--muted)" }}>{done ? "✓" : st.n}</span>
+                  color: active ? "#ffffff" : done ? "var(--good)" : "var(--muted)" }}>{done ? "✓" : st.n}</span>
                 <span className="hide-sm" style={{ fontSize: 13, fontWeight: 600 }}>{st.label}</span>
               </button>
             );
@@ -357,7 +371,7 @@ function BookFlow(props) {
             <div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
                 <span className="display" style={{ fontSize: 19 }}>1 · Date & departure</span>
-                <span className="pill" style={{ background: "rgba(255,193,94,.15)", color: "var(--amber)" }}>☀ Morning only</span>
+                <span className="pill" style={{ background: "rgba(103,232,249,.15)", color: "var(--amber)" }}>☀ Morning only</span>
               </div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
                 <div style={{ flex: "1 1 180px" }}>
@@ -392,7 +406,7 @@ function BookFlow(props) {
                       style={{ ...S.card, padding: 16, borderColor: sel ? "var(--coral)" : "var(--border)", opacity: full ? 0.55 : 1, cursor: full ? "not-allowed" : "pointer", background: sel ? "var(--surface2)" : "var(--surface)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span className="display" style={{ fontSize: 18 }}>{y.name}</span>
-                        <span className="pill" style={{ background: "rgba(52,216,196,.13)", color: "var(--teal)" }}>{y.type === "wide" ? "Wide hull" : "Long hull"}</span>
+                        <span className="pill" style={{ background: "rgba(95,211,232,.14)", color: "var(--teal)" }}>{y.type === "wide" ? "Wide hull" : "Long hull"}</span>
                       </div>
                       <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>{cap(y)} seats · {y.rows}×{y.cols}</div>
                       <div style={{ fontSize: 14, marginTop: 6, color: full ? "var(--bad)" : "var(--good)", fontWeight: 600 }}>
@@ -439,7 +453,7 @@ function BookFlow(props) {
           {step === 4 && yacht && (
             <div>
               <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>4 · Lead guest & booking channel</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="guest-grid">
                 <div style={{ gridColumn: "span 1" }}>
                   <div className="label">Name</div>
                   <input className="inp" placeholder="Guest / group name" value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} />
@@ -478,7 +492,7 @@ function BookFlow(props) {
       </div>
 
       {/* SUMMARY */}
-      <aside style={{ ...S.card, position: "sticky", top: 18 }}>
+      <aside className="summary" style={{ ...S.card }}>
         <div className="label">Booking summary</div>
         <Row k="Date" v={date} />
         <Row k="Departure" v={SLOTS.find((s) => s.id === slot).label} />
@@ -507,9 +521,9 @@ function SeatMap({ yacht, avail, picked, toggle, seatIds }) {
       <div style={{ display: "flex", gap: 16, marginBottom: 14, flexWrap: "wrap", fontSize: 12, color: "var(--muted)" }}>
         <Legend c="var(--surface2)" t="Available" />
         <Legend grad t="Selected" />
-        <Legend c="rgba(255,255,255,.06)" t="Booked" />
+        <Legend c="rgba(10,37,64,.10)" t="Booked" />
       </div>
-      <div style={{ display: "inline-block", padding: "10px 14px 16px", border: "1px solid var(--line)", borderRadius: "40px 40px 14px 14px", background: "rgba(0,0,0,.15)" }}>
+      <div style={{ display: "inline-block", padding: "10px 14px 16px", border: "1px solid var(--line)", borderRadius: "40px 40px 14px 14px", background: "rgba(37,99,235,.06)" }}>
         <div style={{ textAlign: "center", fontSize: 11, color: "var(--muted)", marginBottom: 10, letterSpacing: ".15em" }}>▲ BOW (front)</div>
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${yacht.cols}, 30px)`, gap: 7, justifyContent: "center" }}>
           {ids.map((id) => {
@@ -594,10 +608,10 @@ function Dashboard({ S, bookings, date, setDate, slot, setSlot, availFor, cancel
                 <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "var(--teal)", width: 86 }}>{b.ref}</span>
                 <span style={{ flex: "1 1 140px", fontWeight: 600 }}>{b.customerName}</span>
                 <span className="hide-sm" style={{ fontSize: 13, color: "var(--muted)", width: 120 }}>{y.name} · {SLOTS.find((s) => s.id === b.slot).label}</span>
-                <span className="pill" style={{ background: b.type === "charter" ? "rgba(255,138,91,.16)" : "rgba(52,216,196,.13)", color: b.type === "charter" ? "var(--coral)" : "var(--teal)" }}>
+                <span className="pill" style={{ background: b.type === "charter" ? "rgba(77,159,255,.16)" : "rgba(95,211,232,.14)", color: b.type === "charter" ? "var(--coral)" : "var(--teal)" }}>
                   {b.type === "charter" ? `Charter · ${b.groupSize}` : `${b.seats.length} seats`}
                 </span>
-                <span className="pill" style={{ background: "rgba(255,255,255,.06)", color: "var(--muted)" }}>
+                <span className="pill" style={{ background: "rgba(10,37,64,.06)", color: "var(--muted)" }}>
                   {b.channel === "agent" ? `🤝 ${b.agentName || "Agent"}` : "🌐 Online"}
                 </span>
                 <span style={{ width: 90, textAlign: "right", fontWeight: 600 }}>{money(b.total)}</span>
