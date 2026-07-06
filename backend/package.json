@@ -1,0 +1,10 @@
+{
+  "name": "@ww/backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Placeholder for the shared bookings API. Not built yet — the apps still use localStorage. When ready, expose an HTTP API and point each app's src/lib/storage.js at it.",
+  "scripts": {
+    "dev": "echo \"backend not implemented yet\" && exit 0"
+  }
+}
