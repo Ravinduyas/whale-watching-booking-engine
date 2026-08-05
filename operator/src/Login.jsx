@@ -13,10 +13,14 @@ export default function Login({ authed, onLogin }) {
   // Already signed in? Skip the form.
   useEffect(() => { if (authed) navigate(from, { replace: true }); }, [authed]);
 
-  const submit = (e) => {
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
     e.preventDefault();
-    if (onLogin(u, p)) navigate(from, { replace: true });
-    else setErr("Incorrect username or password.");
+    setBusy(true);
+    const ok = await onLogin(u, p);
+    setBusy(false);
+    if (ok) navigate(from, { replace: true });
+    else setErr("Incorrect username or password, or the API is unreachable.");
   };
 
   return (
@@ -36,7 +40,7 @@ export default function Login({ authed, onLogin }) {
           <input className="inp" type="password" value={p} onChange={(e) => { setP(e.target.value); setErr(""); }} placeholder="••••••••" />
         </div>
         {err && <div style={{ color: "var(--bad)", fontSize: 13, marginTop: 10 }}>{err}</div>}
-        <button className="btn btn-primary" type="submit" style={{ width: "100%", marginTop: 16 }}>Sign in</button>
+        <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: "100%", marginTop: 16 }}>{busy ? "Signing in…" : "Sign in"}</button>
         <p style={{ fontSize: 11.5, color: "var(--muted)", textAlign: "center", marginTop: 12, marginBottom: 0 }}>
           Demo credentials — <strong style={{ color: "var(--text)" }}>operator</strong> / <strong style={{ color: "var(--text)" }}>whales123</strong>
         </p>

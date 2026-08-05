@@ -1,36 +1,49 @@
 /* ─────────────── BOOKING ENGINE (customer-facing) ───────────────
-   Self-contained: owns the whole booking flow state and the
-   confirmation modal. Only depends on the shared `bookings` list
-   and an `addBooking` callback passed down from App.
+   Fleet / slots / pricing come from the API (`config`); seat availability
+   is fetched per date+slot; confirming posts to the API via `onCreate`.
    ───────────────────────────────────────────────────────────── */
 import { useState, useEffect, useMemo } from "react";
-import { YACHTS, SLOTS, PRICE_PER_SEAT, cap, money, todayStr } from "../lib/config.js";
+import { cap, todayStr } from "../lib/config.js";
+import { api } from "../lib/api.js";
 import { S } from "../lib/styles.js";
 import { Row } from "../components/ui.jsx";
 import SeatMap from "./SeatMap.jsx";
 
-export default function BookingPage({ bookings, addBooking }) {
+export default function BookingPage({ config, onCreate }) {
+  const yachts = config.yachts || [];
+  const slots = config.slots || [];
+  const pricePerSeat = config.pricePerSeat || 0;
+  const closedDates = config.closedDates || [];
+  const money = (n) => (config.currency || "") + Number(n).toLocaleString();
+
   const [date, setDate] = useState(todayStr());
-  const [slot, setSlot] = useState("0630");
+  const [slot, setSlot] = useState(slots[0]?.id || "");
   const [yachtId, setYachtId] = useState(null);
-  const [mode, setMode] = useState("seat"); // 'seat' | 'charter'
+  const [mode, setMode] = useState("seat");
   const [picked, setPicked] = useState([]);
   const [charterSize, setCharterSize] = useState(2);
   const [cust, setCust] = useState({ name: "", phone: "", channel: "online", agentName: "" });
   const [confirmation, setConfirmation] = useState(null);
   const [step, setStep] = useState(1);
+  const [avail, setAvail] = useState([]);
 
-  const yacht = YACHTS.find((y) => y.id === yachtId) || null;
+  const yacht = yachts.find((y) => y.id === yachtId) || null;
+  const isClosed = closedDates.includes(date);
 
-  // availability for a given yacht at current date/slot
+  // fetch seat availability whenever the date/slot changes
+  useEffect(() => {
+    let ok = true;
+    if (slot) api.getAvailability(date, slot).then((a) => { if (ok) setAvail(a); }).catch(() => {});
+    return () => { ok = false; };
+  }, [date, slot]);
+  const refreshAvail = () => api.getAvailability(date, slot).then(setAvail).catch(() => {});
+
+  const availMap = useMemo(() => Object.fromEntries(avail.map((a) => [a.yachtId, a])), [avail]);
   const availFor = (yId) => {
-    const y = YACHTS.find((x) => x.id === yId);
-    const rel = bookings.filter((b) => b.status === "confirmed" && b.date === date && b.slot === slot && b.yachtId === yId);
-    const chartered = rel.some((b) => b.type === "charter");
-    const taken = new Set();
-    rel.forEach((b) => (b.seats || []).forEach((s) => taken.add(s)));
-    const remaining = chartered ? 0 : cap(y) - taken.size;
-    return { chartered, taken, remaining };
+    const a = availMap[yId];
+    const y = yachts.find((x) => x.id === yId);
+    if (!a) return { chartered: false, taken: new Set(), remaining: y ? cap(y) : 0 };
+    return { chartered: a.chartered, taken: new Set(a.taken), remaining: a.remaining };
   };
 
   const seatIds = (y) => {
@@ -42,24 +55,23 @@ export default function BookingPage({ bookings, addBooking }) {
     return ids;
   };
 
-  // reset picks when context changes
   useEffect(() => { setPicked([]); }, [yachtId, date, slot, mode]);
 
   const total = useMemo(() => {
     if (!yacht) return 0;
     if (mode === "charter") return yacht.charter;
-    return picked.length * PRICE_PER_SEAT;
-  }, [yacht, mode, picked]);
+    return picked.length * pricePerSeat;
+  }, [yacht, mode, picked, pricePerSeat]);
 
   const canConfirm = () => {
-    if (!yacht || !cust.name.trim() || !cust.phone.trim()) return false;
+    if (isClosed || !yacht || !cust.name.trim() || !cust.phone.trim()) return false;
     if (cust.channel === "agent" && !cust.agentName.trim()) return false;
     if (mode === "seat") return picked.length > 0;
     return charterSize >= 1 && charterSize <= cap(yacht);
   };
 
   async function confirmBooking() {
-    const b = await addBooking({
+    const b = await onCreate({
       date, slot, yachtId, type: mode,
       seats: mode === "seat" ? picked : [],
       groupSize: mode === "charter" ? charterSize : picked.length,
@@ -67,6 +79,7 @@ export default function BookingPage({ bookings, addBooking }) {
       channel: cust.channel, agentName: cust.agentName.trim(),
     });
     setConfirmation(b);
+    refreshAvail();
   }
 
   function resetFlow() {
@@ -86,9 +99,8 @@ export default function BookingPage({ bookings, addBooking }) {
     { n: 3, label: "How to book" },
     { n: 4, label: "Lead guest" },
   ];
-  // whether the CURRENT step has enough input to move on
   const stepValid = (s) => {
-    if (s === 1) return true;
+    if (s === 1) return !isClosed;
     if (s === 2) return !!yacht;
     if (s === 3) return mode === "seat" ? picked.length > 0 : (charterSize >= 1 && charterSize <= cap(yacht));
     if (s === 4) return canConfirm();
@@ -97,6 +109,8 @@ export default function BookingPage({ bookings, addBooking }) {
   const canNext = stepValid(step);
   const goNext = () => { if (canNext) setStep((s) => Math.min(4, s + 1)); };
   const goBack = () => setStep((s) => Math.max(1, s - 1));
+
+  const slotLabel = (id) => (slots.find((s) => s.id === id) || {}).label || "—";
 
   return (
     <>
@@ -107,7 +121,7 @@ export default function BookingPage({ bookings, addBooking }) {
             {steps.map((st) => {
               const active = step === st.n;
               const done = st.n < step;
-              const reachable = st.n <= step; // can jump back to visited steps
+              const reachable = st.n <= step;
               return (
                 <button key={st.n} onClick={() => reachable && setStep(st.n)}
                   style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, cursor: reachable ? "pointer" : "not-allowed",
@@ -123,9 +137,8 @@ export default function BookingPage({ bookings, addBooking }) {
             })}
           </div>
 
-          {/* CURRENT STEP — one "window" at a time */}
           <section style={S.card} className="fu" key={step}>
-            {/* 1. Date + morning slot */}
+            {/* 1. Date + slot */}
             {step === 1 && (
               <div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
@@ -140,7 +153,7 @@ export default function BookingPage({ bookings, addBooking }) {
                   <div style={{ flex: "1 1 240px" }}>
                     <div className="label">Departure</div>
                     <div className="seg">
-                      {SLOTS.map((s) => (
+                      {slots.map((s) => (
                         <button key={s.id} className={slot === s.id ? "on" : ""} onClick={() => setSlot(s.id)}>
                           {s.label} <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {s.tag}</span>
                         </button>
@@ -148,15 +161,16 @@ export default function BookingPage({ bookings, addBooking }) {
                     </div>
                   </div>
                 </div>
+                {isClosed && <div style={{ marginTop: 14, color: "var(--bad)", fontSize: 14, fontWeight: 600 }}>⚠ We're closed on this date — please pick another.</div>}
               </div>
             )}
 
-            {/* 2. Choose yacht */}
+            {/* 2. Yacht */}
             {step === 2 && (
               <div>
                 <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>2 · Choose your yacht</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 12 }}>
-                  {YACHTS.map((y) => {
+                  {yachts.map((y) => {
                     const a = availFor(y.id);
                     const sel = yachtId === y.id;
                     const full = a.remaining === 0;
@@ -188,7 +202,7 @@ export default function BookingPage({ bookings, addBooking }) {
                 </div>
                 <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 18 }}>
                   {mode === "seat"
-                    ? <>Price: <strong style={{ color: "var(--text)" }}>{money(PRICE_PER_SEAT)}</strong> per seat</>
+                    ? <>Price: <strong style={{ color: "var(--text)" }}>{money(pricePerSeat)}</strong> per seat</>
                     : <>Flat charter: <strong style={{ color: "var(--text)" }}>{money(yacht.charter)}</strong> for the whole {yacht.name} — any group size up to {cap(yacht)}</>}
                 </div>
 
@@ -208,7 +222,7 @@ export default function BookingPage({ bookings, addBooking }) {
               </div>
             )}
 
-            {/* 4. Details + channel */}
+            {/* 4. Details */}
             {step === 4 && yacht && (
               <div>
                 <div className="display" style={{ fontSize: 19, marginBottom: 14 }}>4 · Lead guest & booking channel</div>
@@ -238,7 +252,6 @@ export default function BookingPage({ bookings, addBooking }) {
               </div>
             )}
 
-            {/* NAV — Back / Next, or Confirm on the last step */}
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 22, borderTop: "1px solid var(--line)", paddingTop: 18 }}>
               <button className="btn btn-ghost" style={{ visibility: step === 1 ? "hidden" : "visible" }} onClick={goBack}>← Back</button>
               {step < 4 ? (
@@ -254,7 +267,7 @@ export default function BookingPage({ bookings, addBooking }) {
         <aside className="summary" style={{ ...S.card }}>
           <div className="label">Booking summary</div>
           <Row k="Date" v={date} />
-          <Row k="Departure" v={SLOTS.find((s) => s.id === slot).label} />
+          <Row k="Departure" v={slotLabel(slot)} />
           <Row k="Yacht" v={yacht ? yacht.name : "—"} />
           <Row k="Type" v={!yacht ? "—" : mode === "charter" ? "Full charter" : "Seats"} />
           <Row k="Guests" v={!yacht ? "—" : mode === "charter" ? charterSize : picked.length} />
@@ -271,7 +284,7 @@ export default function BookingPage({ bookings, addBooking }) {
         </aside>
       </div>
 
-      {/* CONFIRMATION MODAL — replaces manual WhatsApp confirmation */}
+      {/* CONFIRMATION MODAL */}
       {confirmation && (
         <div onClick={resetFlow} style={{ position: "fixed", inset: 0, background: "rgba(4,14,30,.7)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", padding: 20, zIndex: 50 }}>
           <div className="fu" onClick={(e) => e.stopPropagation()} style={{ ...S.card, maxWidth: 440, width: "100%", textAlign: "center" }}>
@@ -280,8 +293,8 @@ export default function BookingPage({ bookings, addBooking }) {
             <p style={{ color: "var(--muted)", marginTop: 0 }}>Instant confirmation — no manual follow-up needed.</p>
             <div style={{ background: "var(--bg)", borderRadius: 12, padding: 16, margin: "16px 0", textAlign: "left" }}>
               <Row k="Reference" v={confirmation.ref} mono />
-              <Row k="Yacht" v={YACHTS.find((y) => y.id === confirmation.yachtId).name} />
-              <Row k="Date / time" v={`${confirmation.date} · ${SLOTS.find((s) => s.id === confirmation.slot).label}`} />
+              <Row k="Yacht" v={(yachts.find((y) => y.id === confirmation.yachtId) || {}).name || confirmation.yachtId} />
+              <Row k="Date / time" v={`${confirmation.date} · ${slotLabel(confirmation.slot)}`} />
               <Row k="Type" v={confirmation.type === "charter" ? `Full yacht charter (${confirmation.groupSize} pax)` : `${confirmation.seats.length} seat(s): ${confirmation.seats.join(", ")}`} />
               <Row k="Channel" v={confirmation.channel === "agent" ? `Travel agent · ${confirmation.agentName}` : "Online"} />
               <Row k="Total" v={money(confirmation.total)} bold />

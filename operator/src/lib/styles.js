@@ -1,12 +1,12 @@
 /* Shared style object + global CSS, used across booking and operator modules. */
 export const S = {
-  page: { minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'Outfit', sans-serif" },
+  page: { minHeight: "100vh", background: "var(--bg)", color: "var(--text)", fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" },
   wrap: { maxWidth: 1080, margin: "0 auto", padding: "0 20px 80px" },
   card: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, padding: 22 },
 };
 
 export const GLOBAL_CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Outfit:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   :root{
     --bg:#ffffff; --surface:#f4f8ff; --surface2:#e6f0fd; --border:rgba(10,37,64,.14);
     --line:rgba(10,37,64,.09); --text:#0c2748; --muted:rgba(12,39,72,.60);
@@ -25,7 +25,7 @@ export const GLOBAL_CSS = `
   html,body{background:var(--bg)}
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
   .fu{animation:fadeUp .55s ease both}
-  .display{font-family:'Fraunces',serif}
+  .display{font-weight:700;letter-spacing:-.02em}
   .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 11px;border-radius:999px}
   .seat{width:30px;height:30px;border-radius:8px 8px 7px 7px;border:1px solid var(--line);
     background:var(--surface2);cursor:pointer;transition:transform .12s,background .15s,box-shadow .15s;
@@ -73,6 +73,14 @@ export const GLOBAL_CSS = `
   .kpi-sub{font-size:12px;color:var(--muted);margin-top:2px}
   .brow{display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--bg);border:1px solid var(--line);border-radius:12px;flex-wrap:wrap;transition:border-color .15s,box-shadow .15s}
   .brow:hover{border-color:var(--border);box-shadow:0 3px 14px rgba(13,39,72,.07)}
+  /* data table */
+  .tbl-wrap{overflow-x:auto;margin:0 -4px}
+  .tbl{width:100%;border-collapse:collapse;font-size:14px;min-width:660px}
+  .tbl th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 12px 10px;white-space:nowrap}
+  .tbl th.num,.tbl td.num{text-align:right}
+  .tbl td{padding:12px;border-top:1px solid var(--line);vertical-align:middle}
+  .tbl tbody tr{cursor:pointer;transition:background .12s}
+  .tbl tbody tr:hover{background:var(--surface2)}
   .chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap}
   .occ-track{flex:1;height:9px;background:var(--track);border-radius:6px;overflow:hidden;min-width:80px}
   .occ-fill{height:100%;border-radius:6px;transition:width .4s}

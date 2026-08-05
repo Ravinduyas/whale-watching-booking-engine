@@ -6,4 +6,5 @@ export default defineConfig({
   // (its own subdomain, a /operator/ sub-path, or a static file server).
   base: "./",
   plugins: [react()],
+  server: { port: 5174 },
 });

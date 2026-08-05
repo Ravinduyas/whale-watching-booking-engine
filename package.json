@@ -13,6 +13,8 @@
     "preview": "npm run preview -w frontend",
     "dev:operator": "npm run dev -w operator",
     "build:operator": "npm run build -w operator",
-    "preview:operator": "npm run preview -w operator"
+    "preview:operator": "npm run preview -w operator",
+    "dev:backend": "npm run dev -w backend",
+    "start:backend": "npm run start -w backend"
   }
 }

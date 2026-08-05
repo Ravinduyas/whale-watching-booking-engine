@@ -1,14 +1,11 @@
-// OPERATOR CONSOLE — standalone staff app (separate package from the customer
-// booking engine). A full control surface with a sidebar to manage bookings,
-// the fleet, the departure schedule, pricing and system settings.
-//
-// UX: dark mode, toast notifications with undo, and a confirm dialog.
+// OPERATOR CONSOLE — standalone staff app, wired to the MongoDB-backed API.
+// Fleet / schedule / pricing / bookings all persist server-side.
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Routes, Route, NavLink, Navigate, useNavigate } from "react-router-dom";
 import { S, GLOBAL_CSS } from "./lib/styles.js";
-import { loadBookings, saveBookings, mkBooking, resetBookings } from "./lib/storage.js";
-import { loadSettings, saveSettings, makeMoney } from "./lib/settings.js";
+import { makeMoney } from "./lib/settings.js";
+import { api, setToken, hasToken } from "./lib/api.js";
 import { Toasts, ConfirmDialog } from "./components/ui.jsx";
 import RequireAuth from "./RequireAuth.jsx";
 import Login from "./Login.jsx";
@@ -29,25 +26,37 @@ const TABS = [
 export default function App() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [ready, setReady] = useState(false);
-  const [settings, setSettings] = useState(() => loadSettings());
-  const [authed, setAuthed] = useState(() => {
-    try { return localStorage.getItem("ww:auth:v1") === "1"; } catch (e) { return false; }
-  });
+  const [authed, setAuthed] = useState(false);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem("ww:theme") || "light"; } catch (e) { return "light"; }
   });
-
-  useEffect(() => {
-    loadBookings().then((b) => { setBookings(b); setReady(true); });
-  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem("ww:theme", theme); } catch (e) { /* ignore */ }
   }, [theme]);
 
-  const money = useMemo(() => makeMoney(settings.currency), [settings.currency]);
+  // load server data for an authenticated session
+  async function loadAll() {
+    const [s, b] = await Promise.all([api.getSettings(), api.getBookings()]);
+    setSettings(s);
+    setBookings(b);
+  }
+
+  // resume an existing token on first load
+  useEffect(() => {
+    (async () => {
+      if (hasToken()) {
+        try { await loadAll(); setAuthed(true); }
+        catch (e) { setToken(""); }
+      }
+      setReady(true);
+    })();
+  }, []);
+
+  const money = useMemo(() => makeMoney(settings?.currency || ""), [settings]);
 
   // ── toasts ──
   const [toasts, setToasts] = useState([]);
@@ -59,72 +68,78 @@ export default function App() {
     setTimeout(() => dismiss(id), action ? 6000 : 3500);
   };
 
-  // ── confirm dialog (promise-based) ──
+  // ── confirm dialog ──
   const [confirmState, setConfirmState] = useState(null);
   const confirm = (opts) => new Promise((resolve) => {
     setConfirmState({ ...opts, resolve: (v) => { setConfirmState(null); resolve(v); } });
   });
 
-  // ── settings ops ──
+  // ── settings ops (optimistic + persist) ──
   function updateSettings(patch) {
     setSettings((prev) => {
       const next = typeof patch === "function" ? patch(prev) : { ...prev, ...patch };
-      saveSettings(next);
+      api.saveSettings(next).catch(() => toast("Couldn't save settings"));
       return next;
     });
   }
 
-  // ── booking ops (with toast feedback + undo) ──
-  async function commit(next) { setBookings(next); await saveBookings(next); }
+  // ── booking ops ──
   async function addBooking(input) {
-    const b = mkBooking(input, { yachts: settings.yachts, pricePerSeat: settings.pricePerSeat });
-    await commit([...bookings, b]);
+    const b = await api.createBooking(input);
+    setBookings((l) => [...l, b]);
     toast(`Booking ${b.ref} created`);
     return b;
   }
   const cancelBooking = (ref) => {
-    const prev = bookings;
-    commit(prev.map((b) => (b.ref === ref ? { ...b, status: "cancelled" } : b)));
-    toast(`Booking ${ref} cancelled`, { label: "Undo", fn: () => commit(prev) });
+    setBookings((l) => l.map((b) => (b.ref === ref ? { ...b, status: "cancelled" } : b)));
+    api.updateBooking(ref, { status: "cancelled" }).catch(() => toast("Update failed"));
+    toast(`Booking ${ref} cancelled`, { label: "Undo", fn: () => restoreBooking(ref) });
   };
   const restoreBooking = (ref) => {
-    commit(bookings.map((b) => (b.ref === ref ? { ...b, status: "confirmed" } : b)));
+    setBookings((l) => l.map((b) => (b.ref === ref ? { ...b, status: "confirmed" } : b)));
+    api.updateBooking(ref, { status: "confirmed" }).catch(() => toast("Update failed"));
     toast(`Booking ${ref} restored`);
   };
   const deleteBooking = (ref) => {
-    const prev = bookings;
-    commit(prev.filter((b) => b.ref !== ref));
-    toast(`Booking ${ref} deleted`, { label: "Undo", fn: () => commit(prev) });
+    const removed = bookings.find((b) => b.ref === ref);
+    setBookings((l) => l.filter((b) => b.ref !== ref));
+    api.deleteBooking(ref).catch(() => toast("Delete failed"));
+    toast(`Booking ${ref} deleted`, removed && { label: "Undo", fn: async () => { const b = await api.createBooking(removed); setBookings((l) => [...l, b]); } });
   };
-  const clearBookings = () => {
-    const prev = bookings;
-    commit([]);
-    toast("All bookings cleared", { label: "Undo", fn: () => commit(prev) });
+  const clearBookings = async () => {
+    await api.clearBookings();
+    setBookings([]);
+    toast("All bookings cleared");
   };
   async function reseedBookings() {
-    const prev = bookings;
-    setBookings(await resetBookings());
-    toast("Demo data restored", { label: "Undo", fn: () => commit(prev) });
+    setBookings(await api.resetBookings());
+    toast("Demo data restored");
   }
 
-  // ── auth ops (checked against editable settings) ──
-  function login(u, p) {
-    if (u.trim() === settings.user && p === settings.password) {
+  // ── auth ──
+  async function login(user, password) {
+    try {
+      const { token } = await api.login(user, password);
+      setToken(token);
+      await loadAll();
       setAuthed(true);
-      try { localStorage.setItem("ww:auth:v1", "1"); } catch (e) { /* ignore */ }
       return true;
+    } catch (e) {
+      setToken("");
+      return false;
     }
-    return false;
   }
   function logout() {
+    setToken("");
     setAuthed(false);
-    try { localStorage.removeItem("ww:auth:v1"); } catch (e) { /* ignore */ }
+    setSettings(null);
+    setBookings([]);
     navigate("/login");
   }
 
   const shared = { settings, updateSettings, bookings, money, toast, confirm };
   const loading = <p style={{ color: "var(--muted)", marginTop: 40 }}>Loading…</p>;
-  const guard = (el) => <RequireAuth authed={authed}>{el}</RequireAuth>;
+  const guard = (el) => (authed && settings ? el : <Navigate to="/login" replace />);
 
   const routes = (
     <Routes>
@@ -146,9 +161,8 @@ export default function App() {
     <div style={S.page}>
       <style>{GLOBAL_CSS}</style>
 
-      {authed ? (
+      {authed && settings ? (
         <div className="admin-shell">
-          {/* SIDEBAR */}
           <aside className="sidebar">
             <div className="brand">
               <div style={{ width: 34, height: 34, borderRadius: 10, background: "var(--sun)", display: "grid", placeItems: "center", fontSize: 17 }}>📊</div>
@@ -172,17 +186,12 @@ export default function App() {
             </div>
           </aside>
 
-          {/* CONTENT */}
           <div className="admin-main">
-            <div className="admin-main-inner">
-              {!ready ? loading : routes}
-            </div>
+            <div className="admin-main-inner">{routes}</div>
           </div>
         </div>
       ) : (
-        <main style={S.wrap}>
-          {!ready ? loading : routes}
-        </main>
+        <main style={S.wrap}>{!ready ? loading : routes}</main>
       )}
 
       <Toasts toasts={toasts} onDismiss={dismiss} />
